@@ -86,7 +86,7 @@ interface PendingRequest {
 
 const INITIALIZE_TIMEOUT_MS = 120_000;
 const SESSION_TIMEOUT_MS = 120_000;
-const PROMPT_TIMEOUT_MS = 30 * 60_000;
+const PROMPT_TIMEOUT_MS = 2 * 60 * 60_000;
 
 function parseModelOption(raw: unknown): AcpModelOption | null {
   if (!raw || typeof raw !== 'object') return null;

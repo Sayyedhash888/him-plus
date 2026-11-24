@@ -72,18 +72,25 @@ export async function openWorkspace(
     });
     if (!proceed) return;
   }
+  const restrict = useConfigStore.getState().config?.prefs.restrictFileAccess !== false;
+  const previousWorkspace = useCoreStore.getState().workspace;
   try {
-    await him.fs.readDir(target).catch(async (error) => {
-      throw new Error(`Cannot open workspace: ${cleanErrorMessage(error)}`);
-    });
+    // Point the guard at the new folder BEFORE validating it, otherwise the
+    // restriction blocks reading the folder the user just picked.
+    await him.fs.setWorkspaceAccess(target, restrict);
+    await him.fs.readDir(target);
   } catch (error) {
+    try {
+      await him.fs.setWorkspaceAccess(previousWorkspace || null, restrict);
+    } catch {
+      // ignore restore failure
+    }
     toast('error', cleanErrorMessage(error), 'Open workspace failed');
     return;
   }
   editor.closeAll();
   const core = useCoreStore.getState();
   core.setWorkspace(target);
-  const restrict = useConfigStore.getState().config?.prefs.restrictFileAccess !== false;
   try {
     await him.fs.setWorkspaceAccess(target, restrict);
   } catch {

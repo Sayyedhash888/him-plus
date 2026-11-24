@@ -220,18 +220,18 @@ function entryPromptChars(entry: ChatEntry): number {
  * Keeps long conversations inside the selected model's context window by
  * summarizing older turns locally (no extra model call, no data leaves the app).
  */
-function autoCompactIfNeeded(sessionId: string, model: ModelOption): void {
+function autoCompactIfNeeded(sessionId: string, model: ModelOption, force = false): void {
   const session = getSession(sessionId);
   if (!session) return;
   const window = resolveCapabilities(model.model.id, model.model.capabilities).contextWindow;
   const used = session.messages.reduce((total, entry) => total + entryPromptChars(entry), 0) + 4_000;
   const budget = Math.max(8_000, Math.floor(window * 0.75));
-  if (used <= budget) return;
+  if (!force && used <= budget) return;
   const conversational = session.messages.filter(
     (entry) => entry.role === 'user' || (entry.role === 'assistant' && !entry.streaming),
   );
-  if (conversational.length < 6) return;
-  const keep = session.messages.slice(-8);
+  if (conversational.length < (force ? 3 : 6)) return;
+  const keep = session.messages.slice(force ? -5 : -8);
   const summaryEntry: ChatEntry = {
     id: uid('msg'),
     role: 'system',
@@ -247,6 +247,12 @@ function autoCompactIfNeeded(sessionId: string, model: ModelOption): void {
     'info',
     `Long conversation compacted to stay inside the ${Math.round(window / 1000)}k-token context window.`,
     'Context auto-compacted',
+  );
+}
+
+function isContextLimitError(message: string): boolean {
+  return /context (window|length)|maximum context|too many tokens|prompt is too long|request is too large|exceeds? the (maximum|context)|reduce the length|input token limit/i.test(
+    message,
   );
 }
 
@@ -523,7 +529,10 @@ async function runAgentLoop(
   let finalAssistantId: string | null = null;
   let lastAssistantMessage: ChatEntry | null = null;
   let rounds = 0;
-  const MAX_ROUNDS = 24;
+  const MAX_ROUNDS = 200;
+  let autoContinues = 0;
+  let contextRetries = 0;
+  let lengthRetries = 0;
   let activeModel = model;
   let fellBack = false;
 
@@ -532,8 +541,36 @@ async function runAgentLoop(
   const prepared = getSession(sessionId);
   const imageParts = prepared ? await resolveImageParts(prepared.messages) : new Map<string, LlmImagePart[]>();
 
-  while (rounds < MAX_ROUNDS && !run.stopped) {
+  while (!run.stopped) {
+    if (rounds >= MAX_ROUNDS) {
+      if (autoContinues < 2) {
+        autoContinues += 1;
+        rounds = 0;
+        autoCompactIfNeeded(sessionId, activeModel, true);
+        getAgentHost().appendMessage(sessionId, {
+          id: uid('msg'),
+          role: 'user',
+          content:
+            'Continue the task from exactly where you stopped. You were interrupted by an internal round limit. Do not repeat completed work; keep going until the task is genuinely finished.',
+          createdAt: Date.now(),
+        });
+        getAgentHost().notify(
+          'info',
+          'Continuing automatically after the tool-round limit.',
+          'Auto-continue',
+        );
+      } else {
+        getAgentHost().notify(
+          'info',
+          'Paused after several auto-continuations. Send a follow-up message to keep going.',
+          'Round limit',
+        );
+        break;
+      }
+    }
     rounds += 1;
+    // Keep the working set inside the context window for very long turns.
+    autoCompactIfNeeded(sessionId, activeModel);
     const session = getSession(sessionId);
     if (!session) return;
 
@@ -628,6 +665,24 @@ async function runAgentLoop(
       if (flushTimer) {
         clearTimeout(flushTimer);
         flushTimer = null;
+      }
+      const errorText = (error as Error)?.message || String(error);
+      if (
+        !aborted &&
+        !run.stopped &&
+        isContextLimitError(errorText) &&
+        contextRetries < 3
+      ) {
+        contextRetries += 1;
+        getAgentHost().removeMessage(sessionId, assistantId);
+        autoCompactIfNeeded(sessionId, activeModel, true);
+        getAgentHost().notify(
+          'info',
+          'The provider context window was reached. Older turns were compacted and the turn resumed.',
+          'Context compacted',
+        );
+        rounds -= 1;
+        continue;
       }
       if (!fellBack && !aborted && !run.stopped && rounds === 1) {
         const fallbackModel = pickFallbackModel(activeModel);
@@ -733,6 +788,17 @@ async function runAgentLoop(
         getAgentHost().setStatus(sessionId, 'error', 'The model returned an empty response.');
         getAgentHost().notify('error', 'The model returned no content and no tool calls.', 'Empty response');
         return;
+      }
+      if (result.finishReason === 'length' && lengthRetries < 3) {
+        lengthRetries += 1;
+        getAgentHost().appendMessage(sessionId, {
+          id: uid('msg'),
+          role: 'user',
+          content:
+            'Your previous response was cut off by the output token limit. Continue exactly where you stopped. Do not repeat completed work and keep the next response concise.',
+          createdAt: Date.now(),
+        });
+        continue;
       }
       break;
     }

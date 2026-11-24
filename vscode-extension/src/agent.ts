@@ -321,7 +321,7 @@ export async function runHimAgent(input: {
   const includeSubagents = Boolean(input.context?.spawnSubagent);
 
   let useTools = true;
-  for (let round = 0; round < 5; round += 1) {
+  for (let round = 0; round < 16; round += 1) {
     let reply: ApiMessage;
     try {
       reply = await callChat(model, messages, useTools, input.signal, includeSubagents);

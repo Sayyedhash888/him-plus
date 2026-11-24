@@ -11,6 +11,17 @@ rather than a stable API commitment.
 
 ### Added
 
+- **ACP permissions now follow the HIM+ mode:** read-only requests are
+  auto-allowed in Plan/Review (no dialog), Plan denies writes/commands, Review
+  prompts for them, and Auto passes them through. The dialog is classified by
+  operation kind and supports per-session **Always allow**. Duplicate native
+  approval cards are suppressed for ACP sessions.
+- **Long tasks no longer stop at agent limits:** the native agent round limit is
+  raised (200) with automatic continuation, mid-turn context auto-compaction,
+  retry-after-compaction when a provider reports a context-window error, and
+  automatic continuation when an answer was cut off by the output-token limit.
+  ACP prompt timeout is raised to two hours; the VS Code extension agent runs up
+  to 16 tool rounds instead of 5.
 - **Token accounting for every backend:** ACP agents report usage when available
   (parsed from `session/prompt` results) and otherwise estimate from streamed
   thinking/answer text; PTY CLI agents estimate from mirrored terminal output,

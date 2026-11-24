@@ -7,6 +7,11 @@ import path from 'node:path';
 import { acpRegistry, checkAcpHealth } from './acpRegistry';
 import { getMcpServerConfigs } from './mcp';
 import { toAcpMcpServers } from '../shared/acp';
+import {
+  acpGrantKey,
+  classifyAcpPermission,
+  shouldAutoAllowAcp,
+} from './acpPermission';
 import { fileURLToPath } from 'node:url';
 import type {
   AcpConnectRequest,
@@ -36,6 +41,8 @@ interface AcpEntry {
   client: AcpClient;
   acpSessionId: string | null;
   busy: boolean;
+  /** "Always allow" grants for this ACP session (kind+title). */
+  grants: Set<string>;
 }
 
 const entries = new Map<string, AcpEntry>();
@@ -139,22 +146,27 @@ async function decidePermission(
   entry: AcpEntry,
   request: AcpPermissionRequest,
 ): Promise<{ optionId: string } | 'cancelled'> {
-  const allow =
-    optionForKind(request.options, ['allow_once', 'allow_always']) ||
+  const allowOnce =
+    optionForKind(request.options, ['allow_once']) ||
+    optionForKind(request.options, ['allow_always']) ||
     request.options.find((option) => option.kind?.startsWith('allow')) ||
     null;
+  const allowAlways = optionForKind(request.options, ['allow_always']) || null;
   const reject =
     optionForKind(request.options, ['reject_once', 'reject_always']) ||
     request.options.find((option) => option.kind?.startsWith('reject')) ||
     null;
 
-  if (entry.permission === 'plan') {
+  const kind = classifyAcpPermission(request.toolCall);
+  const grantKey = acpGrantKey(kind, request.toolCall);
+
+  // Reads are safe in plan/review and never prompt. Plan mode denies everything
+  // else; grants and Auto mode pass writes/commands through the client gate.
+  if (shouldAutoAllowAcp(entry.permission, kind) || entry.grants.has(grantKey)) {
+    if (allowOnce) return { optionId: allowOnce.optionId };
     return reject ? { optionId: reject.optionId } : 'cancelled';
   }
-  if (entry.permission === 'auto') {
-    return allow ? { optionId: allow.optionId } : 'cancelled';
-  }
-  if (!allow) return reject ? { optionId: reject.optionId } : 'cancelled';
+  if (!allowOnce) return reject ? { optionId: reject.optionId } : 'cancelled';
 
   const window = BrowserWindow.fromWebContents(entry.sender);
   if (!window || window.isDestroyed()) {
@@ -164,19 +176,27 @@ async function decidePermission(
     typeof request.toolCall.title === 'string' && request.toolCall.title.trim()
       ? request.toolCall.title.trim()
       : 'An ACP agent wants to run a tool';
+  const buttons = [allowOnce.name || 'Allow once'];
+  if (allowAlways) buttons.push(allowAlways.name || 'Always allow');
+  buttons.push(reject?.name || 'Reject');
+  const rejectIndex = buttons.length - 1;
   const result = await dialog.showMessageBox(window, {
     type: 'question',
-    title: 'ACP permission',
+    title: `ACP permission · ${kind}`,
     message: title,
     detail:
       permissionDetail(request.toolCall) ||
       'Review this operation before allowing the external agent to continue.',
-    buttons: [allow.name || 'Allow once', reject?.name || 'Reject'],
-    defaultId: 1,
-    cancelId: 1,
+    buttons,
+    defaultId: rejectIndex,
+    cancelId: rejectIndex,
     noLink: true,
   });
-  if (result.response === 0) return { optionId: allow.optionId };
+  if (result.response === 0) return { optionId: allowOnce.optionId };
+  if (allowAlways && result.response === 1) {
+    entry.grants.add(grantKey);
+    return { optionId: allowAlways.optionId };
+  }
   return reject ? { optionId: reject.optionId } : 'cancelled';
 }
 
@@ -226,6 +246,7 @@ function createEntry(
     client,
     acpSessionId: null,
     busy: false,
+    grants: new Set<string>(),
   };
   const created = entry;
   entries.set(created.sessionId, created);

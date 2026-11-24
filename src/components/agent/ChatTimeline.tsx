@@ -66,7 +66,14 @@ export function ApprovalCard({
   sessionId: string;
   call: ToolCallState;
 }) {
+  const backend = useSessionStore(
+    (state) => state.sessions.find((session) => session.id === sessionId)?.backend,
+  );
   const [pendingChoice, setPendingChoice] = useState<'allow' | 'reject' | null>(null);
+  // ACP agents bring their own permission requests, handled by the ACP client
+  // gate (read-only operations are auto-allowed by the HIM+ permission mode).
+  // Do not render a second, native approval card for them.
+  if (backend === 'acp') return null;
   const command =
     call.name === 'run_terminal_command'
       ? String(call.parsedArgs.command || call.meta?.command || '')

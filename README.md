@@ -288,6 +288,12 @@ Safety boundaries to keep in mind:
   (Freebuff/Aider/etc.) is an interactive CLI in a PTY: its own permission prompts
   and tool execution are not gated by HIM+ Review mode. The chat view labels this
   clearly and the raw terminal is always available for its menus.
+- **ACP permissions follow the selected HIM+ mode.** Read-only ACP requests
+  (`read_files`, list/search/fetch) are auto-allowed in Plan/Review and never show
+  a dialog; Plan denies writes/commands, Review asks for them, Auto passes them
+  through the ACP client gate. The approval dialog classifies the request and
+  offers **Always allow** (per session, per operation kind). ACP sessions no longer
+  show the duplicate native approval card.
 - **CLI sessions persist and compact.** Prompts and cleaned terminal output are
   mirrored into the session's messages, so CLI agents are saved in the same
   `chats.db` (SQLite) history as native/ACP sessions and restored after a restart —
