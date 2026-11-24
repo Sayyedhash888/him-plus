@@ -1,0 +1,162 @@
+{
+  "name": "him-plus",
+  "displayName": "HIM+",
+  "description": "HIM+ chat in the HIM+ Code secondary sidebar, plus inline completions and a bridge to the HIM+ desktop workbench.",
+  "version": "0.5.0",  "publisher": "himplus",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:him.chat",
+    "onCommand:him.openChat",
+    "onCommand:him.openDesktop",
+    "onCommand:him.openConfig",
+    "onCommand:him.newChat",
+    "onCommand:him.toggleAutocomplete"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "him-chat",
+          "title": "HIM+",
+          "icon": "media/him-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "him-chat": [
+        {
+          "id": "him.chat",
+          "name": "HIM+",
+          "type": "webview"
+        }
+      ]
+    },
+    "themes": [
+      {
+        "label": "HIM+ Black",
+        "uiTheme": "vs-dark",
+        "path": "./themes/him-onyx-color-theme.json"
+      },
+      {
+        "label": "HIM+ Dark Grey",
+        "uiTheme": "vs-dark",
+        "path": "./themes/him-graphite-color-theme.json"
+      },
+      {
+        "label": "HIM+ Light",
+        "uiTheme": "vs",
+        "path": "./themes/him-light-color-theme.json"
+      },
+      {
+        "label": "HIM+ Marimo",
+        "uiTheme": "vs",
+        "path": "./themes/him-marimo-color-theme.json"
+      },
+      {
+        "label": "HIM+ Midnight",
+        "uiTheme": "vs-dark",
+        "path": "./themes/him-midnight-color-theme.json"
+      },
+      {
+        "label": "HIM+ Terminal",
+        "uiTheme": "vs-dark",
+        "path": "./themes/him-terminal-color-theme.json"
+      },
+      {
+        "label": "HIM+ Sandstone",
+        "uiTheme": "vs",
+        "path": "./themes/him-sandstone-color-theme.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "him.openChat",
+        "title": "Open HIM+ Chat",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.focusChat",
+        "title": "Focus HIM+ Chat",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.openDesktop",
+        "title": "Open HIM+ Desktop",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.openConfig",
+        "title": "Open HIM+ Configuration",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.newChat",
+        "title": "New Chat",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.toggleAutocomplete",
+        "title": "Toggle HIM+ Autocomplete",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.toggleFim",
+        "title": "Toggle FIM in HIM+ config.json",
+        "category": "HIM+"
+      },
+      {
+        "command": "him.reloadConfig",
+        "title": "Reload HIM+ Configuration",
+        "category": "HIM+"
+      }
+    ],
+    "configuration": {
+      "title": "HIM+",
+      "properties": {
+        "him.desktopPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the HIM+ desktop executable. Leave empty to auto-detect the installed app."
+        },
+        "him.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to HIM+ config.json. Leave empty to use the HIM+ app data directory."
+        },
+        "him.autocomplete.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable HIM+ inline completions using the configured HIM+ FIM model. Turn off if using Windsurf or Copilot completions."
+        },
+        "him.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional plaintext provider API key, used instead of the one in HIM+ `config.json`. Leave empty: the HIM+ desktop app stores its key encrypted with Windows DPAPI, and HIM+ decrypts it automatically. Set this only if decryption fails or you run on a non-Windows host."
+        },
+        "him.chat.openOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the HIM+ chat panel in the secondary side bar (right) the first time a window starts. Once you close the panel yourself, HIM+ leaves it closed."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
+    "package": "node ../scripts/package-him-vscode-extension.mjs"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.106.0",
+    "esbuild": "^0.24.2"
+  }
+}
+
